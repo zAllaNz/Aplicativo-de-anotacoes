@@ -59,12 +59,9 @@ router.post("/login", authController.login);
  *               - email
  *               - password
  *             properties:
- *               first_name:
+ *               name:
  *                 type: string
  *                 example: João
- *               surname:
- *                 type: string
- *                 example: Silva
  *               email:
  *                 type: string
  *                 example: joao@email.com

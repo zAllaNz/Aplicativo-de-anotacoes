@@ -77,7 +77,7 @@ exports.login = async (req, res) => {
  */
 exports.register = async (req, res) => {
     try {
-        const { email, password, first_name, surname, ...rest } = req.body;
+        const { email, password, name, ...rest } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Campos "email" e "password" são obrigatórios.' });
@@ -89,7 +89,7 @@ exports.register = async (req, res) => {
             process.env.CRYPTO_SECURITY_PASS
         ).toString();
 
-        const user = await User.create({ email, password: encryptedPassword, first_name, surname, ...rest });
+        const user = await User.create({ email, password: encryptedPassword, name, ...rest });
 
         res.status(201).json({ message: "Usuário registrado com sucesso.", user });
     } catch (error) {
