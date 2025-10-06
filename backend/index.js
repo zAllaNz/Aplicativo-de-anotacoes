@@ -68,6 +68,7 @@ app.use((req, res, next) => {
 
 
 app.use(apiPrefix + '/auth', require('./server/routes/auth.route.js'));
+app.use(apiPrefix + '/notes', require('./server/routes/note.route.js'));
 
 app.listen(process.env.PORT, () => {
     console.log(`🚀 Server running on PORT: ${process.env.PORT}`);
