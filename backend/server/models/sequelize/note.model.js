@@ -28,6 +28,13 @@ const Note = sequelize.define('Note', {
     updated_at: {
         type: DataTypes.DATE,
     },
+    deleted: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    deleted_at: {
+        type: DataTypes.DATE,
+    },
 }, {
     tableName: 'notes',
     timestamps: false,
