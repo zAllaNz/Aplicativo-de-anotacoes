@@ -14,15 +14,13 @@ Este guia descreve os passos para rodar o backend do projeto.
    Certifique-se que nenhum processo do PostgreSQL está rodando. No Windows, por exemplo, você pode checar pelo Gerenciador de Tarefas e finalizar processos com `postgres.exe`.  
 
 2. **Configurar variáveis de ambiente**  
-Crie um arquivo `.env` baseado no `.env.example`.  
+    Crie um arquivo `.env` baseado no `.env.example`.  
    ```bash
    cp .env.example .env
    ```
    
-3. **Subir containers do Docker**
-
-Suba os containers do projeto usando Docker Compose:
-
+3. **Subir containers do Docker**   
+    Suba os containers do projeto usando Docker Compose:
   ```bash
    docker-compose up
    ```
