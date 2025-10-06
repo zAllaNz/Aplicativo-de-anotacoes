@@ -145,3 +145,61 @@ exports.delete = async (req, res) => { //Adiciona uma flag de deletada na nota
         return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 };
+
+exports.restore = async (req, res) => { //Tira a flag de deletada da nota
+    try {
+        let token = req.headers['authorization'];
+        if (!token) {
+            return res.status(401).json({ error: 'Token de autenticação não fornecido.' });
+        }
+        token = token.replace('Bearer ', '');
+
+        // Verifica se o token está na blacklist (logout)
+        const isBlacklisted = await redisClient.get(`bl_${token}`);
+        if (isBlacklisted) {
+            return res.status(401).json({ error: 'Token inválido ou expirado.' });
+        }
+
+        const decoded = require("jsonwebtoken").verify(token, process.env.JWT_SECURITY_PASS);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Token inválido ou expirado.' });
+        }
+
+        const { id } = req.params;
+        const note = await Note.findByPk(id);
+
+        if (!note) {
+            return res.status(404).json({ error: 'Nota não encontrada.' });
+        }
+
+        const userId = decoded.id;
+        if (note.user_id !== userId) {
+            return res.status(403).json({ error: 'Você não tem permissão para restaurar esta nota.' });
+        }
+
+        note.deleted = false;
+        note.deleted_at = null;
+
+        await note.save();  
+        return res.status(200).json({ message: 'Nota restaurada com sucesso.', note });
+    } catch (error) {
+        console.error('Erro ao restaurar nota:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+exports.deletePermanent = async (req, res) => { //Deleta a nota permanentemente
+    try {
+        const { id } = req.params;
+        const note = await Note.findByPk(id);
+
+        if (!note) {
+            return res.status(404).json({ error: 'Nota não encontrada.' });
+        }
+        await note.destroy();  
+        return res.status(200).json({ message: 'Nota deletada permanentemente com sucesso.', note });
+    } catch (error) {
+        console.error('Erro ao deletar nota:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
