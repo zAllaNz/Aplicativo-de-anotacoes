@@ -93,6 +93,7 @@ exports.update = async (req, res) => {
 
         note.title = title || note.title;
         note.content = content || note.content;
+        note.updated_at = new Date();
 
         await note.save();  
         return res.status(200).json({ message: 'Nota atualizada com sucesso.', note });
