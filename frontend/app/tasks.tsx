@@ -44,6 +44,8 @@ export default function TasksScreen() {
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
   const [tasks, setTasks] = useState<Task[]>([
     // Dados mockados para demonstração
     {
@@ -77,6 +79,28 @@ export default function TasksScreen() {
       setTasks([newTask, ...tasks]);
       setNewTaskText('');
     }
+  };
+
+  const startEditingTask = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditingText(task.text);
+  };
+
+  const saveEditedTask = () => {
+    if (editingText.trim() && editingTaskId) {
+      setTasks(tasks.map(task => 
+        task.id === editingTaskId 
+          ? { ...task, text: editingText.trim() }
+          : task
+      ));
+      setEditingTaskId(null);
+      setEditingText('');
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingTaskId(null);
+    setEditingText('');
   };
 
   const handleLogout = () => {
@@ -160,7 +184,42 @@ export default function TasksScreen() {
                 key={task.id} 
                 style={[styles.taskCard, { backgroundColor: task.color }]}
               >
-                <Text style={styles.taskText}>{task.text}</Text>
+                {editingTaskId === task.id ? (
+                  // Modo de edição
+                  <View style={styles.editingContainer}>
+                    <TextInput
+                      style={styles.editingInput}
+                      value={editingText}
+                      onChangeText={setEditingText}
+                      multiline
+                      autoFocus
+                      onSubmitEditing={saveEditedTask}
+                      returnKeyType="done"
+                    />
+                    <View style={styles.editingButtons}>
+                      <TouchableOpacity 
+                        style={styles.saveButton} 
+                        onPress={saveEditedTask}
+                      >
+                        <Text style={styles.saveButtonText}>✓</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.cancelButton} 
+                        onPress={cancelEditing}
+                      >
+                        <Text style={styles.cancelButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  // Modo de visualização
+                  <TouchableOpacity 
+                    style={styles.taskTextContainer}
+                    onPress={() => startEditingTask(task)}
+                  >
+                    <Text style={styles.taskText}>{task.text}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -335,11 +394,59 @@ const styles = StyleSheet.create({
     // Efeito de post-it
     transform: [{ rotate: `${Math.random() * 4 - 2}deg` }],
   },
+  taskTextContainer: {
+    flex: 1,
+  },
   taskText: {
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
     fontWeight: '500',
+  },
+  editingContainer: {
+    flex: 1,
+  },
+  editingInput: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 4,
+    padding: 8,
+    marginBottom: 10,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  editingButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  saveButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 20,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  cancelButton: {
+    backgroundColor: '#f44336',
+    borderRadius: 20,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   // Estilos do modal de cores
   modalOverlay: {
