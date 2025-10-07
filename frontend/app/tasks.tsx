@@ -1,28 +1,24 @@
-import { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  SafeAreaView, 
-  StatusBar,
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
   ScrollView,
-  Dimensions,
   Modal,
-  FlatList 
+  FlatList,
+  Animated,
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useTaskContext, Task } from '@/contexts/TaskContext';
 
 const { width } = Dimensions.get('window');
-
-interface Task {
-  id: string;
-  text: string;
-  color: string;
-  createdAt: Date;
-}
 
 // Cores disponíveis para os post-its
 const TASK_COLORS = [
@@ -41,42 +37,22 @@ const TASK_COLORS = [
 ];
 
 export default function TasksScreen() {
+  const { tasks, deletedTasks, addTask, updateTask, deleteTask } = useTaskContext();
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  const [tasks, setTasks] = useState<Task[]>([
-    // Dados mockados para demonstração
-    {
-      id: '1',
-      text: 'Comprar ingredientes para o jantar',
-      color: '#FFE066',
-      createdAt: new Date()
-    },
-    {
-      id: '2', 
-      text: 'Estudar React Native',
-      color: '#99CCFF',
-      createdAt: new Date()
-    },
-    {
-      id: '3',
-      text: 'Fazer exercícios físicos',
-      color: '#99FF99',
-      createdAt: new Date()
-    }
-  ]);
 
-  const addTask = () => {
+  const handleAddTask = () => {
     if (newTaskText.trim()) {
-      const newTask: Task = {
+      const newTask = {
         id: Date.now().toString(),
         text: newTaskText.trim(),
         color: selectedColor,
         createdAt: new Date()
       };
-      setTasks([newTask, ...tasks]);
+      addTask(newTask);
       setNewTaskText('');
     }
   };
@@ -88,11 +64,7 @@ export default function TasksScreen() {
 
   const saveEditedTask = () => {
     if (editingText.trim() && editingTaskId) {
-      setTasks(tasks.map(task => 
-        task.id === editingTaskId 
-          ? { ...task, text: editingText.trim() }
-          : task
-      ));
+      updateTask(editingTaskId, editingText.trim());
       setEditingTaskId(null);
       setEditingText('');
     }
@@ -103,12 +75,24 @@ export default function TasksScreen() {
     setEditingText('');
   };
 
+  const handleDeleteTask = (taskId: string) => {
+    deleteTask(taskId);
+    // Cancela edição se estiver editando esta tarefa
+    if (editingTaskId === taskId) {
+      cancelEditing();
+    }
+  };
+
+  const handleDeletedItems = () => {
+    router.push('/deleted-items');
+  };
+
   const handleLogout = () => {
     router.replace('/');
   };
 
   const navigateToDeletedItems = () => {
-    router.push('/deleted-tasks');
+    router.push('/deleted-items');
   };
 
   return (
@@ -124,16 +108,13 @@ export default function TasksScreen() {
           <Text style={styles.headerTitle}>📝 Minhas Tarefas</Text>
           <View style={styles.headerButtons}>
             <TouchableOpacity 
-              style={styles.headerButton} 
-              onPress={navigateToDeletedItems}
+              style={styles.deletedItemsButton}
+              onPress={handleDeletedItems}
             >
-              <Text style={styles.headerButtonText}>🗑️ Lixeira</Text>
+              <Text style={styles.deletedItemsButtonText}>🗑️ Excluídos ({deletedTasks.length})</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.headerButton} 
-              onPress={handleLogout}
-            >
-              <Text style={styles.headerButtonText}>Sair</Text>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutButtonText}>Sair</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -152,12 +133,12 @@ export default function TasksScreen() {
             placeholderTextColor="#999"
             value={newTaskText}
             onChangeText={setNewTaskText}
-            onSubmitEditing={addTask}
+            onSubmitEditing={handleAddTask}
             returnKeyType="done"
           />
           <TouchableOpacity 
             style={styles.addTaskButton} 
-            onPress={addTask}
+            onPress={handleAddTask}
           >
             <Text style={styles.addTaskButtonText}>+</Text>
           </TouchableOpacity>
@@ -213,12 +194,20 @@ export default function TasksScreen() {
                   </View>
                 ) : (
                   // Modo de visualização
-                  <TouchableOpacity 
-                    style={styles.taskTextContainer}
-                    onPress={() => startEditingTask(task)}
-                  >
-                    <Text style={styles.taskText}>{task.text}</Text>
-                  </TouchableOpacity>
+                  <View style={styles.taskViewContainer}>
+                    <TouchableOpacity 
+                      style={styles.taskTextContainer}
+                      onPress={() => startEditingTask(task)}
+                    >
+                      <Text style={styles.taskText}>{task.text}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteTask(task.id)}
+                    >
+                      <Text style={styles.deleteButtonText}>🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             ))}
@@ -292,6 +281,28 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     gap: 10,
+  },
+  deletedItemsButton: {
+    backgroundColor: '#666',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  deletedItemsButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  logoutButton: {
+    backgroundColor: '#ff4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  logoutButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
   },
   headerButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -396,6 +407,19 @@ const styles = StyleSheet.create({
   },
   taskTextContainer: {
     flex: 1,
+  },
+  taskViewContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  deleteButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  deleteButtonText: {
+    fontSize: 16,
   },
   taskText: {
     fontSize: 14,
