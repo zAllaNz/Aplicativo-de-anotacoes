@@ -46,6 +46,10 @@ export default function LoginScreen() {
     // Simulação de login
     if (email === 'teste@email.com' && password === '123456') {
       setMessage('Login realizado com sucesso!');
+      // Redirecionar para a tela de tarefas após 1 segundo
+      setTimeout(() => {
+        router.replace('/tasks');
+      }, 1000);
     } else {
       setMessage('Email ou senha incorretos');
     }
