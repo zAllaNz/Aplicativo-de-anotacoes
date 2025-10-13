@@ -45,13 +45,15 @@ exports.create = async (req, res) => {
     } catch (error) {
         console.error('Erro ao criar nota:', error);
         return res.status(500).json({ error: 'Erro interno do servidor.' });
-    }   
+    }
 };
 
 exports.getAll = async (req, res) => {
     try {
         const { userId } = req.params;
-        const notes = await Note.findAll({ where: { userId } });
+        const notes = await Note.findAll({
+            where: { user_id: userId },
+        });
         return res.status(200).json({ notes });
     } catch (error) {
         console.error('Erro ao buscar notas:', error);
@@ -67,7 +69,7 @@ exports.update = async (req, res) => {
             return res.status(401).json({ error: 'Token de autenticação não fornecido.' });
         }
         token = token.replace('Bearer ', '');
-        
+
         // Verifica se o token está na blacklist (logout)
         const isBlacklisted = await redisClient.get(`bl_${token}`);
         if (isBlacklisted) {
@@ -78,11 +80,11 @@ exports.update = async (req, res) => {
         if (!decoded) {
             return res.status(401).json({ error: 'Token inválido ou expirado.' });
         }
-        
+
         const { id } = req.params;
         const { title, content } = req.body;
         const note = await Note.findByPk(id);
-        
+
         if (!note) {
             return res.status(404).json({ error: 'Nota não encontrada.' });
         }
@@ -95,8 +97,8 @@ exports.update = async (req, res) => {
         note.title = title || note.title;
         note.content = content || note.content;
         note.updated_at = new Date();
-        
-        await note.save();  
+
+        await note.save();
         return res.status(200).json({ message: 'Nota atualizada com sucesso.', note });
     } catch (error) {
         console.error('Erro ao atualizar nota:', error);
@@ -138,7 +140,7 @@ exports.delete = async (req, res) => { //Adiciona uma flag de deletada na nota
         note.deleted = true;
         note.deleted_at = new Date();
 
-        await note.save();  
+        await note.save();
         return res.status(200).json({ message: 'Nota deletada com sucesso.', note });
     } catch (error) {
         console.error('Erro ao deletar nota:', error);
@@ -180,7 +182,7 @@ exports.restore = async (req, res) => { //Tira a flag de deletada da nota
         note.deleted = false;
         note.deleted_at = null;
 
-        await note.save();  
+        await note.save();
         return res.status(200).json({ message: 'Nota restaurada com sucesso.', note });
     } catch (error) {
         console.error('Erro ao restaurar nota:', error);
@@ -196,7 +198,7 @@ exports.deletePermanent = async (req, res) => { //Deleta a nota permanentemente
         if (!note) {
             return res.status(404).json({ error: 'Nota não encontrada.' });
         }
-        await note.destroy();  
+        await note.destroy();
         return res.status(200).json({ message: 'Nota deletada permanentemente com sucesso.', note });
     } catch (error) {
         console.error('Erro ao deletar nota:', error);
