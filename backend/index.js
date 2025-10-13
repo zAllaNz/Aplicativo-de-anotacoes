@@ -41,15 +41,34 @@ app.use(session({
 const apiPrefix = '/anotacoes/api/v1'
 
 const options = {
-    definition: {
+    definition: { // ✅ o nome correto é definition, não precisa duplicar
         openapi: "3.0.0",
         info: {
             title: "API de Anotações",
             version: "1.0.0",
+            description: "Documentação da API de Notas com autenticação JWT",
         },
-        servers: [{ url: `http://localhost:${process.env.PORT}${apiPrefix}` }],
+        servers: [
+            {
+                url: `http://localhost:${process.env.PORT || 3000}${apiPrefix}`,
+            },
+        ],
+        components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: "http",
+                    scheme: "bearer",
+                    bearerFormat: "JWT",
+                },
+            },
+        },
+        security: [
+            {
+                bearerAuth: [],
+            },
+        ],
     },
-    apis: ["./server/routes/*.js"], // 👈 pega anotações dentro dos arquivos de rotas
+    apis: ["./server/routes/*.js"], // 👈 Pega as anotações dentro dos arquivos de rotas
 };
 
 const specs = swaggerJsdoc(options);
