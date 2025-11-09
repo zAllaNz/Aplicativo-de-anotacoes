@@ -153,8 +153,13 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   const toggleItemChecked = (taskId: string, itemId: string) => {
     setTasks(tasks.map(task => {
       if (task.id !== taskId) return task;
-      const items = (task.items || []).map(item => item.id === itemId ? { ...item, checked: !item.checked } : item);
-      return { ...task, items };
+      const updated = (task.items || []).map(item => item.id === itemId ? { ...item, checked: !item.checked } : item);
+      // Reordenar: itens não marcados primeiro, marcados ao final (ordem estável)
+      const reordered = [
+        ...updated.filter(i => !i.checked),
+        ...updated.filter(i => i.checked),
+      ];
+      return { ...task, items: reordered };
     }));
   };
 
