@@ -5,15 +5,17 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Modal,
   FlatList,
-  Animated,
   Dimensions,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
-import { PanGestureHandler } from 'react-native-gesture-handler';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTaskContext, Task } from '@/contexts/TaskContext';
@@ -37,7 +39,7 @@ const TASK_COLORS = [
 ];
 
 export default function TasksScreen() {
-  const { tasks, deletedTasks, addTask, updateTask, deleteTask } = useTaskContext();
+  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks } = useTaskContext();
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -95,6 +97,146 @@ export default function TasksScreen() {
     router.push('/deleted-items');
   };
 
+  // Web: sensores do dnd-kit para arrastar no navegador
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  const handleWebDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = tasks.findIndex((t) => t.id === String(active.id));
+    const newIndex = tasks.findIndex((t) => t.id === String(over.id));
+    if (oldIndex !== -1 && newIndex !== -1) {
+      reorderTasks(arrayMove(tasks, oldIndex, newIndex));
+    }
+  };
+
+  const WebSortableItem: React.FC<{ task: Task }> = ({ task }) => {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: task.id });
+    const transformStyleArray = transform
+      ? [
+          { translateX: transform.x },
+          { translateY: transform.y },
+          { scaleX: transform.scaleX },
+          { scaleY: transform.scaleY },
+        ]
+      : [];
+    if (isDragging) {
+      transformStyleArray.push({ scaleX: 1.02 });
+      transformStyleArray.push({ scaleY: 1.02 });
+    }
+    return (
+      <View
+        ref={(node) => (setNodeRef as any)(node)}
+        style={[
+          styles.taskCard,
+          { backgroundColor: task.color },
+          { transform: transformStyleArray },
+          isDragging && styles.draggingCard,
+        ]}
+        {...(listeners as any)}
+      >
+        {editingTaskId === task.id ? (
+          <View style={styles.editingContainer}>
+            <TextInput
+              style={styles.editingInput}
+              value={editingText}
+              onChangeText={setEditingText}
+              multiline
+              autoFocus
+              onSubmitEditing={saveEditedTask}
+              returnKeyType="done"
+            />
+            <View style={styles.editingButtons}>
+              <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
+                <Text style={styles.saveButtonText}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
+                <Text style={styles.cancelButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.taskViewContainer}>
+            <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
+              <Text style={styles.taskText}>{task.text}</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(task.id)}>
+                <Text style={styles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+              <View style={styles.dragHandle}>
+                <Text style={styles.dragHandleIcon}>≡</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderDraggableItem = ({ item, drag }: RenderItemParams<Task>) => {
+    const isEditing = editingTaskId === item.id;
+    return (
+      <View style={[styles.taskCard, { backgroundColor: item.color }]}>        
+        {isEditing ? (
+          <View style={styles.editingContainer}>
+            <TextInput
+              style={styles.editingInput}
+              value={editingText}
+              onChangeText={setEditingText}
+              multiline
+              autoFocus
+              onSubmitEditing={saveEditedTask}
+              returnKeyType="done"
+            />
+            <View style={styles.editingButtons}>
+              <TouchableOpacity 
+                style={styles.saveButton} 
+                onPress={saveEditedTask}
+              >
+                <Text style={styles.saveButtonText}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={cancelEditing}
+              >
+                <Text style={styles.cancelButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.taskViewContainer}>
+            <TouchableOpacity 
+              style={styles.taskTextContainer}
+              onPress={() => startEditingTask(item)}
+            >
+              <Text style={styles.taskText}>{item.text}</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={() => handleDeleteTask(item.id)}
+              >
+                <Text style={styles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.dragHandle}
+                delayLongPress={150}
+                onLongPress={drag}
+              >
+                <Text style={styles.dragHandleIcon}>≡</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#667eea" />
@@ -145,13 +287,9 @@ export default function TasksScreen() {
         </View>
       </LinearGradient>
 
-      {/* Lista de tarefas */}
-      <ScrollView 
-        style={styles.tasksContainer}
-        contentContainerStyle={styles.tasksContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {tasks.length === 0 ? (
+      {/* Lista de tarefas com arrastar e soltar */}
+      {Platform.OS === 'web' ? (
+        tasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>
               Nenhuma tarefa ainda.{'\n'}
@@ -159,61 +297,38 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <View style={styles.tasksGrid}>
-            {tasks.map((task) => (
-              <View 
-                key={task.id} 
-                style={[styles.taskCard, { backgroundColor: task.color }]}
-              >
-                {editingTaskId === task.id ? (
-                  // Modo de edição
-                  <View style={styles.editingContainer}>
-                    <TextInput
-                      style={styles.editingInput}
-                      value={editingText}
-                      onChangeText={setEditingText}
-                      multiline
-                      autoFocus
-                      onSubmitEditing={saveEditedTask}
-                      returnKeyType="done"
-                    />
-                    <View style={styles.editingButtons}>
-                      <TouchableOpacity 
-                        style={styles.saveButton} 
-                        onPress={saveEditedTask}
-                      >
-                        <Text style={styles.saveButtonText}>✓</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.cancelButton} 
-                        onPress={cancelEditing}
-                      >
-                        <Text style={styles.cancelButtonText}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  // Modo de visualização
-                  <View style={styles.taskViewContainer}>
-                    <TouchableOpacity 
-                      style={styles.taskTextContainer}
-                      onPress={() => startEditingTask(task)}
-                    >
-                      <Text style={styles.taskText}>{task.text}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteTask(task.id)}
-                    >
-                      <Text style={styles.deleteButtonText}>🗑️</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleWebDragEnd}>
+            <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              <View style={styles.tasksContainer}>
+                <View style={styles.tasksContent}>
+                  {tasks.map((task) => (
+                    <WebSortableItem key={task.id} task={task} />
+                  ))}
+                </View>
               </View>
-            ))}
+            </SortableContext>
+          </DndContext>
+        )
+      ) : (
+        tasks.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Nenhuma tarefa ainda.{'\n'}
+              Adicione uma nova tarefa acima! 📝
+            </Text>
           </View>
-        )}
-      </ScrollView>
+        ) : (
+          <DraggableFlatList
+            data={tasks}
+            keyExtractor={(item) => item.id}
+            renderItem={renderDraggableItem}
+            onDragEnd={({ data }) => reorderTasks(data)}
+            style={styles.tasksContainer}
+            contentContainerStyle={styles.tasksContent}
+            showsVerticalScrollIndicator
+          />
+        )
+      )}
 
       {/* Modal de seleção de cores */}
       <Modal
@@ -420,6 +535,26 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 16,
+  },
+  dragHandle: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  dragHandleIcon: {
+    fontSize: 18,
+    color: '#333',
+  },
+  draggingCard: {
+    opacity: 0.95,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
+    position: 'relative',
   },
   taskText: {
     fontSize: 14,

@@ -17,6 +17,7 @@ interface TaskContextType {
   restoreTask: (id: string) => void;
   permanentlyDeleteTask: (id: string) => void;
   clearAllDeleted: () => void;
+  reorderTasks: (newOrder: Task[]) => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -108,6 +109,10 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     setDeletedTasks([]);
   };
 
+  const reorderTasks = (newOrder: Task[]) => {
+    setTasks(newOrder);
+  };
+
   const value: TaskContextType = {
     tasks,
     deletedTasks,
@@ -117,6 +122,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     restoreTask,
     permanentlyDeleteTask,
     clearAllDeleted,
+    reorderTasks,
   };
 
   return (
