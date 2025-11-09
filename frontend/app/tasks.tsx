@@ -39,22 +39,17 @@ const TASK_COLORS = [
 ];
 
 export default function TasksScreen() {
-  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks } = useTaskContext();
+  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks, setTaskMode, updateTaskItems, toggleItemChecked, addTaskItem } = useTaskContext();
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
 
   const handleAddTask = () => {
     if (newTaskText.trim()) {
-      const newTask = {
-        id: Date.now().toString(),
-        text: newTaskText.trim(),
-        color: selectedColor,
-        createdAt: new Date()
-      };
-      addTask(newTask);
+      addTask({ text: newTaskText.trim(), color: selectedColor });
       setNewTaskText('');
     }
   };
@@ -137,19 +132,54 @@ export default function TasksScreen() {
           { transform: transformStyleArray },
           isDragging && styles.draggingCard,
         ]}
-        {...(listeners as any)}
+        {...(editingTaskId === task.id ? ({} as any) : (listeners as any))}
       >
         {editingTaskId === task.id ? (
           <View style={styles.editingContainer}>
-            <TextInput
-              style={styles.editingInput}
-              value={editingText}
-              onChangeText={setEditingText}
-              multiline
-              autoFocus
-              onSubmitEditing={saveEditedTask}
-              returnKeyType="done"
-            />
+            {task.mode === 'list' ? (
+              <View style={styles.listContainer}>
+                {(task.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(task.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.listItemInput}
+                      value={it.text}
+                      autoFocus={it.id === lastAddedItemId}
+                      onChangeText={(txt) => {
+                        const next = (task.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                        updateTaskItems(task.id, next);
+                      }}
+                    />
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                  <TouchableOpacity
+                    style={styles.addItemButton}
+                    onPress={() => {
+                      const newId = addTaskItem(task.id);
+                      setLastAddedItemId(newId);
+                    }}
+                  >
+                    <Text style={styles.addItemText}>+ Item</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.editingInput}
+                value={editingText}
+                onChangeText={setEditingText}
+                multiline
+                autoFocus
+                onSubmitEditing={saveEditedTask}
+                returnKeyType="done"
+              />
+            )}
             <View style={styles.editingButtons}>
               <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
                 <Text style={styles.saveButtonText}>✓</Text>
@@ -161,10 +191,48 @@ export default function TasksScreen() {
           </View>
         ) : (
           <View style={styles.taskViewContainer}>
-            <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
-              <Text style={styles.taskText}>{task.text}</Text>
-            </TouchableOpacity>
+            {task.mode === 'list' ? (
+              <View style={{ flex: 1 }}>
+                {(task.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(task.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(task)}>
+                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                        {it.text}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
+                <Text style={styles.taskText}>{task.text}</Text>
+              </TouchableOpacity>
+            )}
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={styles.modeToggleButton}
+                onPress={() => setTaskMode(task.id, task.mode === 'list' ? 'text' : 'list')}
+              >
+                <Text style={styles.modeToggleText}>{task.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+              </TouchableOpacity>
+              {task.mode === 'list' && (
+                <TouchableOpacity
+                  style={styles.addItemButton}
+                  onPress={() => {
+                    const newId = addTaskItem(task.id);
+                    setLastAddedItemId(newId);
+                    startEditingTask(task);
+                  }}
+                >
+                  <Text style={styles.addItemText}>+ Item</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(task.id)}>
                 <Text style={styles.deleteButtonText}>🗑️</Text>
               </TouchableOpacity>
@@ -184,15 +252,50 @@ export default function TasksScreen() {
       <View style={[styles.taskCard, { backgroundColor: item.color }]}>        
         {isEditing ? (
           <View style={styles.editingContainer}>
-            <TextInput
-              style={styles.editingInput}
-              value={editingText}
-              onChangeText={setEditingText}
-              multiline
-              autoFocus
-              onSubmitEditing={saveEditedTask}
-              returnKeyType="done"
-            />
+            {item.mode === 'list' ? (
+              <View style={styles.listContainer}>
+                {(item.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(item.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.listItemInput}
+                      value={it.text}
+                      autoFocus={it.id === lastAddedItemId}
+                      onChangeText={(txt) => {
+                        const next = (item.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                        updateTaskItems(item.id, next);
+                      }}
+                    />
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                  <TouchableOpacity
+                    style={styles.addItemButton}
+                    onPress={() => {
+                      const newId = addTaskItem(item.id);
+                      setLastAddedItemId(newId);
+                    }}
+                  >
+                    <Text style={styles.addItemText}>+ Item</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.editingInput}
+                value={editingText}
+                onChangeText={setEditingText}
+                multiline
+                autoFocus
+                onSubmitEditing={saveEditedTask}
+                returnKeyType="done"
+              />
+            )}
             <View style={styles.editingButtons}>
               <TouchableOpacity 
                 style={styles.saveButton} 
@@ -210,13 +313,51 @@ export default function TasksScreen() {
           </View>
         ) : (
           <View style={styles.taskViewContainer}>
-            <TouchableOpacity 
-              style={styles.taskTextContainer}
-              onPress={() => startEditingTask(item)}
-            >
-              <Text style={styles.taskText}>{item.text}</Text>
-            </TouchableOpacity>
+            {item.mode === 'list' ? (
+              <View style={{ flex: 1 }}>
+                {(item.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(item.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(item)}>
+                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                        {it.text}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.taskTextContainer}
+                onPress={() => startEditingTask(item)}
+              >
+                <Text style={styles.taskText}>{item.text}</Text>
+              </TouchableOpacity>
+            )}
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity 
+                style={styles.modeToggleButton}
+                onPress={() => setTaskMode(item.id, item.mode === 'list' ? 'text' : 'list')}
+              >
+                <Text style={styles.modeToggleText}>{item.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+              </TouchableOpacity>
+              {item.mode === 'list' && (
+                <TouchableOpacity
+                  style={styles.addItemButton}
+                  onPress={() => {
+                    const newId = addTaskItem(item.id);
+                    setLastAddedItemId(newId);
+                    startEditingTask(item);
+                  }}
+                >
+                  <Text style={styles.addItemText}>+ Item</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
                 style={styles.deleteButton}
                 onPress={() => handleDeleteTask(item.id)}
@@ -547,6 +688,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#333',
   },
+  modeToggleButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  modeToggleText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  addItemButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  addItemText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
   draggingCard: {
     opacity: 0.95,
     shadowColor: '#000',
@@ -561,6 +726,43 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 20,
     fontWeight: '500',
+  },
+  listContainer: {
+    marginTop: 4,
+  },
+  listItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  checkboxText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  listItemInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   editingContainer: {
     flex: 1,
