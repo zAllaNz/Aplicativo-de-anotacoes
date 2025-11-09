@@ -1,22 +1,35 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
+export interface TaskListItem {
+  id: string;
+  text: string;
+  checked: boolean;
+}
+
 export interface Task {
   id: string;
   text: string;
   color: string;
   createdAt: Date;
   deletedAt?: Date;
+  mode?: 'text' | 'list';
+  items?: TaskListItem[];
 }
 
 interface TaskContextType {
   tasks: Task[];
   deletedTasks: Task[];
-  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
+  addTask: (task: { text: string; color: string; mode?: 'text' | 'list'; items?: TaskListItem[] }) => void;
   updateTask: (id: string, text: string) => void;
   deleteTask: (id: string) => void;
   restoreTask: (id: string) => void;
   permanentlyDeleteTask: (id: string) => void;
   clearAllDeleted: () => void;
+  reorderTasks: (newOrder: Task[]) => void;
+  setTaskMode: (id: string, mode: 'text' | 'list') => void;
+  updateTaskItems: (id: string, items: TaskListItem[]) => void;
+  toggleItemChecked: (taskId: string, itemId: string) => void;
+  addTaskItem: (taskId: string, text?: string) => string;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -40,36 +53,42 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       id: '1',
       text: 'Comprar ingredientes para o jantar',
       color: '#FFE066',
-      createdAt: new Date()
+      createdAt: new Date(),
+      mode: 'text'
     },
     {
       id: '2', 
       text: 'Estudar React Native',
       color: '#99CCFF',
-      createdAt: new Date()
+      createdAt: new Date(),
+      mode: 'text'
     },
     {
       id: '3',
       text: 'Fazer exercícios físicos',
       color: '#99FF99',
-      createdAt: new Date()
+      createdAt: new Date(),
+      mode: 'text'
     },
     {
       id: '4',
       text: 'Ler um livro',
       color: '#FFCC99',
-      createdAt: new Date()
+      createdAt: new Date(),
+      mode: 'text'
     }
   ]);
 
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
 
-  const addTask = (taskData: Omit<Task, 'id' | 'createdAt'>) => {
+  const addTask = (taskData: { text: string; color: string; mode?: 'text' | 'list'; items?: TaskListItem[] }) => {
     const newTask: Task = {
       id: Date.now().toString(),
       text: taskData.text,
       color: taskData.color,
-      createdAt: new Date()
+      createdAt: new Date(),
+      mode: taskData.mode ?? 'text',
+      items: taskData.items ?? []
     };
     setTasks([newTask, ...tasks]);
   };
@@ -108,6 +127,57 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     setDeletedTasks([]);
   };
 
+  const reorderTasks = (newOrder: Task[]) => {
+    setTasks(newOrder);
+  };
+
+  const setTaskMode = (id: string, mode: 'text' | 'list') => {
+    setTasks(tasks.map(task => {
+      if (task.id !== id) return task;
+      // conversão básica entre modos
+      if (mode === 'list') {
+        const lines = (task.text || '').split('\n').filter(l => l.trim().length > 0);
+        const items: TaskListItem[] = lines.map((t, idx) => ({ id: `${Date.now()}-${idx}`, text: t, checked: false }));
+        return { ...task, mode: 'list', items };
+      } else {
+        const text = (task.items || []).map(i => i.text).join('\n');
+        return { ...task, mode: 'text', text, items: [] };
+      }
+    }));
+  };
+
+  const updateTaskItems = (id: string, items: TaskListItem[]) => {
+    setTasks(tasks.map(task => task.id === id ? { ...task, items } : task));
+  };
+
+  const toggleItemChecked = (taskId: string, itemId: string) => {
+    setTasks(tasks.map(task => {
+      if (task.id !== taskId) return task;
+      const updated = (task.items || []).map(item => item.id === itemId ? { ...item, checked: !item.checked } : item);
+      // Reordenar: itens não marcados primeiro, marcados ao final (ordem estável)
+      const reordered = [
+        ...updated.filter(i => !i.checked),
+        ...updated.filter(i => i.checked),
+      ];
+      return { ...task, items: reordered };
+    }));
+  };
+
+  const addTaskItem = (taskId: string, text: string = ''): string => {
+    const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setTasks(tasks.map(task => {
+      if (task.id !== taskId) return task;
+      const newItem: TaskListItem = {
+        id: newId,
+        text,
+        checked: false,
+      };
+      const items = [...(task.items || []), newItem];
+      return { ...task, items };
+    }));
+    return newId;
+  };
+
   const value: TaskContextType = {
     tasks,
     deletedTasks,
@@ -117,6 +187,11 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     restoreTask,
     permanentlyDeleteTask,
     clearAllDeleted,
+    reorderTasks,
+    setTaskMode,
+    updateTaskItems,
+    toggleItemChecked,
+    addTaskItem,
   };
 
   return (

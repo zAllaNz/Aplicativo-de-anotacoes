@@ -5,15 +5,17 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Modal,
   FlatList,
-  Animated,
   Dimensions,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
-import { PanGestureHandler } from 'react-native-gesture-handler';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTaskContext, Task } from '@/contexts/TaskContext';
@@ -37,22 +39,17 @@ const TASK_COLORS = [
 ];
 
 export default function TasksScreen() {
-  const { tasks, deletedTasks, addTask, updateTask, deleteTask } = useTaskContext();
+  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks, setTaskMode, updateTaskItems, toggleItemChecked, addTaskItem } = useTaskContext();
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
 
   const handleAddTask = () => {
     if (newTaskText.trim()) {
-      const newTask = {
-        id: Date.now().toString(),
-        text: newTaskText.trim(),
-        color: selectedColor,
-        createdAt: new Date()
-      };
-      addTask(newTask);
+      addTask({ text: newTaskText.trim(), color: selectedColor });
       setNewTaskText('');
     }
   };
@@ -93,6 +90,292 @@ export default function TasksScreen() {
 
   const navigateToDeletedItems = () => {
     router.push('/deleted-items');
+  };
+
+  // Web: sensores do dnd-kit para arrastar no navegador
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  const handleWebDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = tasks.findIndex((t) => t.id === String(active.id));
+    const newIndex = tasks.findIndex((t) => t.id === String(over.id));
+    if (oldIndex !== -1 && newIndex !== -1) {
+      reorderTasks(arrayMove(tasks, oldIndex, newIndex));
+    }
+  };
+
+  const WebSortableItem: React.FC<{ task: Task }> = ({ task }) => {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: task.id });
+    const transformStyleArray = transform
+      ? [
+          { translateX: transform.x },
+          { translateY: transform.y },
+          { scaleX: transform.scaleX },
+          { scaleY: transform.scaleY },
+        ]
+      : [];
+    if (isDragging) {
+      transformStyleArray.push({ scaleX: 1.02 });
+      transformStyleArray.push({ scaleY: 1.02 });
+    }
+    return (
+      <View
+        ref={(node) => (setNodeRef as any)(node)}
+        style={[
+          styles.taskCard,
+          { backgroundColor: task.color },
+          { transform: transformStyleArray },
+          isDragging && styles.draggingCard,
+        ]}
+        {...(editingTaskId === task.id ? ({} as any) : (listeners as any))}
+      >
+        {editingTaskId === task.id ? (
+          <View style={styles.editingContainer}>
+            {task.mode === 'list' ? (
+              <View style={styles.listContainer}>
+                {(task.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(task.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.listItemInput}
+                      value={it.text}
+                      autoFocus={it.id === lastAddedItemId}
+                      onChangeText={(txt) => {
+                        const next = (task.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                        updateTaskItems(task.id, next);
+                      }}
+                    />
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                  <TouchableOpacity
+                    style={styles.addItemButton}
+                    onPress={() => {
+                      const newId = addTaskItem(task.id);
+                      setLastAddedItemId(newId);
+                    }}
+                  >
+                    <Text style={styles.addItemText}>+ Item</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.editingInput}
+                value={editingText}
+                onChangeText={setEditingText}
+                multiline
+                autoFocus
+                onSubmitEditing={saveEditedTask}
+                returnKeyType="done"
+              />
+            )}
+            <View style={styles.editingButtons}>
+              <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
+                <Text style={styles.saveButtonText}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
+                <Text style={styles.cancelButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.taskViewContainer}>
+            {task.mode === 'list' ? (
+              <View style={{ flex: 1 }}>
+                {(task.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(task.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(task)}>
+                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                        {it.text}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
+                <Text style={styles.taskText}>{task.text}</Text>
+              </TouchableOpacity>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={styles.modeToggleButton}
+                onPress={() => setTaskMode(task.id, task.mode === 'list' ? 'text' : 'list')}
+              >
+                <Text style={styles.modeToggleText}>{task.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+              </TouchableOpacity>
+              {task.mode === 'list' && (
+                <TouchableOpacity
+                  style={styles.addItemButton}
+                  onPress={() => {
+                    const newId = addTaskItem(task.id);
+                    setLastAddedItemId(newId);
+                    startEditingTask(task);
+                  }}
+                >
+                  <Text style={styles.addItemText}>+ Item</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(task.id)}>
+                <Text style={styles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+              <View style={styles.dragHandle}>
+                <Text style={styles.dragHandleIcon}>≡</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderDraggableItem = ({ item, drag }: RenderItemParams<Task>) => {
+    const isEditing = editingTaskId === item.id;
+    return (
+      <View style={[styles.taskCard, { backgroundColor: item.color }]}>        
+        {isEditing ? (
+          <View style={styles.editingContainer}>
+            {item.mode === 'list' ? (
+              <View style={styles.listContainer}>
+                {(item.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(item.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.listItemInput}
+                      value={it.text}
+                      autoFocus={it.id === lastAddedItemId}
+                      onChangeText={(txt) => {
+                        const next = (item.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                        updateTaskItems(item.id, next);
+                      }}
+                    />
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                  <TouchableOpacity
+                    style={styles.addItemButton}
+                    onPress={() => {
+                      const newId = addTaskItem(item.id);
+                      setLastAddedItemId(newId);
+                    }}
+                  >
+                    <Text style={styles.addItemText}>+ Item</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.editingInput}
+                value={editingText}
+                onChangeText={setEditingText}
+                multiline
+                autoFocus
+                onSubmitEditing={saveEditedTask}
+                returnKeyType="done"
+              />
+            )}
+            <View style={styles.editingButtons}>
+              <TouchableOpacity 
+                style={styles.saveButton} 
+                onPress={saveEditedTask}
+              >
+                <Text style={styles.saveButtonText}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={cancelEditing}
+              >
+                <Text style={styles.cancelButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.taskViewContainer}>
+            {item.mode === 'list' ? (
+              <View style={{ flex: 1 }}>
+                {(item.items || []).map((it) => (
+                  <View key={it.id} style={styles.listItemRow}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                      onPress={() => toggleItemChecked(item.id, it.id)}
+                    >
+                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(item)}>
+                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                        {it.text}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.taskTextContainer}
+                onPress={() => startEditingTask(item)}
+              >
+                <Text style={styles.taskText}>{item.text}</Text>
+              </TouchableOpacity>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity 
+                style={styles.modeToggleButton}
+                onPress={() => setTaskMode(item.id, item.mode === 'list' ? 'text' : 'list')}
+              >
+                <Text style={styles.modeToggleText}>{item.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+              </TouchableOpacity>
+              {item.mode === 'list' && (
+                <TouchableOpacity
+                  style={styles.addItemButton}
+                  onPress={() => {
+                    const newId = addTaskItem(item.id);
+                    setLastAddedItemId(newId);
+                    startEditingTask(item);
+                  }}
+                >
+                  <Text style={styles.addItemText}>+ Item</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={() => handleDeleteTask(item.id)}
+              >
+                <Text style={styles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.dragHandle}
+                delayLongPress={150}
+                onLongPress={drag}
+              >
+                <Text style={styles.dragHandleIcon}>≡</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
@@ -145,13 +428,9 @@ export default function TasksScreen() {
         </View>
       </LinearGradient>
 
-      {/* Lista de tarefas */}
-      <ScrollView 
-        style={styles.tasksContainer}
-        contentContainerStyle={styles.tasksContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {tasks.length === 0 ? (
+      {/* Lista de tarefas com arrastar e soltar */}
+      {Platform.OS === 'web' ? (
+        tasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>
               Nenhuma tarefa ainda.{'\n'}
@@ -159,61 +438,38 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <View style={styles.tasksGrid}>
-            {tasks.map((task) => (
-              <View 
-                key={task.id} 
-                style={[styles.taskCard, { backgroundColor: task.color }]}
-              >
-                {editingTaskId === task.id ? (
-                  // Modo de edição
-                  <View style={styles.editingContainer}>
-                    <TextInput
-                      style={styles.editingInput}
-                      value={editingText}
-                      onChangeText={setEditingText}
-                      multiline
-                      autoFocus
-                      onSubmitEditing={saveEditedTask}
-                      returnKeyType="done"
-                    />
-                    <View style={styles.editingButtons}>
-                      <TouchableOpacity 
-                        style={styles.saveButton} 
-                        onPress={saveEditedTask}
-                      >
-                        <Text style={styles.saveButtonText}>✓</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.cancelButton} 
-                        onPress={cancelEditing}
-                      >
-                        <Text style={styles.cancelButtonText}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  // Modo de visualização
-                  <View style={styles.taskViewContainer}>
-                    <TouchableOpacity 
-                      style={styles.taskTextContainer}
-                      onPress={() => startEditingTask(task)}
-                    >
-                      <Text style={styles.taskText}>{task.text}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteTask(task.id)}
-                    >
-                      <Text style={styles.deleteButtonText}>🗑️</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleWebDragEnd}>
+            <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              <View style={styles.tasksContainer}>
+                <View style={styles.tasksContent}>
+                  {tasks.map((task) => (
+                    <WebSortableItem key={task.id} task={task} />
+                  ))}
+                </View>
               </View>
-            ))}
+            </SortableContext>
+          </DndContext>
+        )
+      ) : (
+        tasks.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Nenhuma tarefa ainda.{'\n'}
+              Adicione uma nova tarefa acima! 📝
+            </Text>
           </View>
-        )}
-      </ScrollView>
+        ) : (
+          <DraggableFlatList
+            data={tasks}
+            keyExtractor={(item) => item.id}
+            renderItem={renderDraggableItem}
+            onDragEnd={({ data }) => reorderTasks(data)}
+            style={styles.tasksContainer}
+            contentContainerStyle={styles.tasksContent}
+            showsVerticalScrollIndicator
+          />
+        )
+      )}
 
       {/* Modal de seleção de cores */}
       <Modal
@@ -421,11 +677,92 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 16,
   },
+  dragHandle: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  dragHandleIcon: {
+    fontSize: 18,
+    color: '#333',
+  },
+  modeToggleButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  modeToggleText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  addItemButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  addItemText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  draggingCard: {
+    opacity: 0.95,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
+    position: 'relative',
+  },
   taskText: {
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
     fontWeight: '500',
+  },
+  listContainer: {
+    marginTop: 4,
+  },
+  listItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  checkboxText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  listItemInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   editingContainer: {
     flex: 1,
