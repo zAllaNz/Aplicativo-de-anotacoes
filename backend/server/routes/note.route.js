@@ -197,5 +197,87 @@ router.put("/restore/:id", noteController.restore);
  */
 router.delete("/delete/:id/permanent", noteController.deletePermanent);
 
+/**
+ * @swagger
+ * /notes/reorder:
+ *   put:
+ *     summary: Atualiza a ordem das notas
+ *     description: Atualiza a posição (ordem) dos post-its após o usuário reordenar via drag-and-drop. Requer token JWT.
+ *     tags: [Notes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - notes
+ *             properties:
+ *               notes:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     order_index:
+ *                       type: integer
+ *                       example: 2
+ *     responses:
+ *       200:
+ *         description: Ordem atualizada com sucesso
+ *       400:
+ *         description: Formato inválido
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.put("/reorder", noteController.reorder);
+
+/**
+ * @swagger
+ * /notes/{id}/check:
+ *   patch:
+ *     summary: Marca ou desmarca item da lista como concluído
+ *     description: Atualiza o estado de um item da lista de tarefas (checkbox). Requer token JWT.
+ *     tags: [Notes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID da nota (tipo lista)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - itemIndex
+ *               - checked
+ *             properties:
+ *               itemIndex:
+ *                 type: integer
+ *                 example: 0
+ *               checked:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Item atualizado com sucesso
+ *       400:
+ *         description: A nota não é do tipo lista
+ *       404:
+ *         description: Nota não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.patch("/:id/check", noteController.toggleCheck);
 
 module.exports = router;
