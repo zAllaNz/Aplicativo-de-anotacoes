@@ -13,8 +13,12 @@ const Note = sequelize.define('Note', {
         type: DataTypes.STRING,
         allowNull: true,
     },
+    type: {
+        type: DataTypes.STRING(20),
+        defaultValue: 'text', // 'text' | 'list'
+    },
     content: {
-        type: DataTypes.TEXT,
+        type: DataTypes.JSONB,
         allowNull: true,
     },
     user_id: {
@@ -34,6 +38,15 @@ const Note = sequelize.define('Note', {
     },
     deleted_at: {
         type: DataTypes.DATE,
+    },
+    order_index: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+    },
+    color: {
+        type: DataTypes.STRING(10),
+        defaultValue: '#FFE066',
     },
 }, {
     tableName: 'notes',
