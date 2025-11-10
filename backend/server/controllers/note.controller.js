@@ -61,7 +61,6 @@ exports.getAll = async (req, res) => {
     }
 };
 
-
 exports.update = async (req, res) => {
     try {
         let token = req.headers['authorization'];
@@ -202,6 +201,52 @@ exports.deletePermanent = async (req, res) => { //Deleta a nota permanentemente
         return res.status(200).json({ message: 'Nota deletada permanentemente com sucesso.', note });
     } catch (error) {
         console.error('Erro ao deletar nota:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+exports.reorder = async (req, res) => {
+    try {
+        const { notes } = req.body; // [{ id: 1, order_index: 0 }, { id: 2, order_index: 1 }]
+        if (!notes || !Array.isArray(notes)) {
+            return res.status(400).json({ error: 'Formato inválido.' });
+        }
+
+        for (const note of notes) {
+            await Note.update(
+                { order_index: note.order_index },
+                { where: { id: note.id } }
+            );
+        }
+
+        return res.status(200).json({ message: 'Ordem atualizada com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao atualizar ordem:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+exports.toggleCheck = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { itemIndex, checked } = req.body;
+
+        const note = await Note.findByPk(id);
+        if (!note) return res.status(404).json({ error: 'Nota não encontrada.' });
+        if (note.type !== 'list') return res.status(400).json({ error: 'A nota não é uma lista.' });
+
+        const content = note.content;
+        content.items[itemIndex].checked = checked;
+
+        // Opcional: mover itens marcados para o final da lista
+        content.items.sort((a, b) => a.checked - b.checked);
+
+        note.content = content;
+        await note.save();
+
+        return res.status(200).json({ message: 'Item atualizado com sucesso.', note });
+    } catch (error) {
+        console.error('Erro ao atualizar checkbox:', error);
         return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 };
