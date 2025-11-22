@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, Status
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { validateEmail } from '../utils/validation';
+import { login } from '@/services/authService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,17 +43,31 @@ export default function LoginScreen() {
     if (hasError) {
       return;
     }
-    
-    // Simulação de login
-    if (email === 'teste@email.com' && password === '123456') {
+
+    login({ email, password })
+    .then(() => {
       setMessage('Login realizado com sucesso!');
-      // Redirecionar para a tela de tarefas após 1 segundo
+
       setTimeout(() => {
         router.replace('/tasks');
       }, 1000);
-    } else {
-      setMessage('Email ou senha incorretos');
-    }
+    })
+    .catch((error) => {
+      setMessage(error?.message || 'Email ou senha incorretos');
+    });
+    
+    // Simulação de login
+    // if (email === 'teste@email.com' && password === '123456') {
+      
+
+    //   setMessage('Login realizado com sucesso!');
+    //   // Redirecionar para a tela de tarefas após 1 segundo
+    //   setTimeout(() => {
+    //     router.replace('/tasks');
+    //   }, 1000);
+    // } else {
+    //   setMessage('Email ou senha incorretos');
+    // }
   };
 
   const navigateToRegister = () => {
