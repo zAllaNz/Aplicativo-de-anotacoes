@@ -29,7 +29,6 @@ export const login = async(data: LoginRequest): Promise<LoginResponse> => {
     return response.data;
   } catch (error) {
     if (isAxiosError(error)) {
-        // console.log('Axios error response:', error);
         throw new Error(error.response?.data.message || 'Erro na requisição de login');
     } else {
         throw new Error('Erro inesperado ao tentar fazer login');
