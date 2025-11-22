@@ -31,6 +31,10 @@ O IP geralmente aparece como algo do tipo:
 ---
 
 ## 2. Configurar o Front-end (Expo)
+Se o arquivo `.env.local` **não existir**, você pode:
+- Criar um novo manualmente, **ou**
+- Copiar o `.env.example` e renomear para `.env.local`, fazendo as devidas alterações.
+
 Com o IP encontrado (exemplo: `192.168.8.4`), edite o arquivo `.env.local` dentro do projeto front-end:
 
 ```
