@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, Status
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { validateEmail, validatePassword, validateName, validatePasswordMatch, getPasswordStrength } from '../utils/validation';
+import { createAccount } from '@/services/authService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -62,7 +63,17 @@ export default function RegisterScreen() {
       return;
     }
     
-    setMessage('Cadastro realizado com sucesso!');
+    createAccount({ name, email, password })
+    .then(() => {
+      setMessage('Cadastro realizado com sucesso!');
+
+      setTimeout(() => {
+        router.replace('/');
+      }, 1000);
+    })
+    .catch((error) => {
+      setMessage(error?.message || 'Não foi possível criar conta');
+    });
   };
 
   const navigateToLogin = () => {
