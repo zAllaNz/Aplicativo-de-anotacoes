@@ -9,7 +9,9 @@ Para que o app consiga se comunicar com a API, é necessário usar o **IP local*
 
 ### **Windows**
 Abra o CMD e rode:
-```bash\ipconfig```
+```bash
+ipconfig
+```
 Procure pelo campo **Endereço IPv4**.
 
 ### **Linux**
