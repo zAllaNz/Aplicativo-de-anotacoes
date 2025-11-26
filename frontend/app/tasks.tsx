@@ -8,19 +8,32 @@ import {
   Modal,
   FlatList,
   Dimensions,
-  SafeAreaView,
   StatusBar,
   Platform,
+  Pressable,
 } from 'react-native';
-import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
-import type { DragEndEvent } from '@dnd-kit/core';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  GestureHandlerRootView,
+  PanGestureHandler,
+  State,
+} from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  interpolate,
+  Extrapolate,
+} from 'react-native-reanimated';
+import { arrayMove } from '@dnd-kit/sortable';
 import { LinearGradient } from 'expo-linear-gradient';
+import ReorderableList, { useReorderableDrag, useIsActive } from 'react-native-reorderable-list';
+import { Gesture } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
 import { useTaskContext, Task } from '@/contexts/TaskContext';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = Platform.OS === 'web' ? (width - 60) / 2 : width - 40;
 
 // Cores disponíveis para os post-its
 const TASK_COLORS = [
@@ -45,7 +58,12 @@ export default function TasksScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+
+
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
+
+  console.log('TasksScreen - Total de tarefas:', tasks.length);
+  console.log('TasksScreen - Plataforma:', Platform.OS);
 
   const handleAddTask = () => {
     if (newTaskText.trim()) {
@@ -92,304 +110,220 @@ export default function TasksScreen() {
     router.push('/deleted-items');
   };
 
-  // Web: sensores do dnd-kit para arrastar no navegador
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
-  );
+  
 
-  const handleWebDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = tasks.findIndex((t) => t.id === String(active.id));
-    const newIndex = tasks.findIndex((t) => t.id === String(over.id));
-    if (oldIndex !== -1 && newIndex !== -1) {
-      reorderTasks(arrayMove(tasks, oldIndex, newIndex));
-    }
-  };
+  // Componente SwipeableItem com react-native-gesture-handler
+  const SwipeableItem = ({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) => {
+    const translateX = useSharedValue(0);
+    const startX = useSharedValue(0);
+    const SWIPE_THRESHOLD = -80;
+    const isActive = useIsActive();
 
-  const WebSortableItem: React.FC<{ task: Task }> = ({ task }) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: task.id });
-    const transformStyleArray = transform
-      ? [
-          { translateX: transform.x },
-          { translateY: transform.y },
-          { scaleX: transform.scaleX },
-          { scaleY: transform.scaleY },
-        ]
-      : [];
-    if (isDragging) {
-      transformStyleArray.push({ scaleX: 1.02 });
-      transformStyleArray.push({ scaleY: 1.02 });
-    }
+    const animatedStyle = useAnimatedStyle(() => {
+      return {
+        transform: [{ translateX: translateX.value }],
+      };
+    });
+
+    const deleteButtonStyle = useAnimatedStyle(() => {
+      const opacity = interpolate(
+        translateX.value,
+        [SWIPE_THRESHOLD, 0],
+        [1, 0],
+        Extrapolate.CLAMP
+      );
+      return {
+        opacity,
+        width: Math.abs(translateX.value),
+      };
+    });
+
+    const onGestureEvent = (event: any) => {
+      translateX.value = startX.value + event.nativeEvent.translationX;
+    };
+
+    const onHandlerStateChange = (event: any) => {
+      if (event.nativeEvent.state === State.END) {
+        if (translateX.value < SWIPE_THRESHOLD / 2) {
+          translateX.value = withSpring(SWIPE_THRESHOLD);
+        } else {
+          translateX.value = withSpring(0);
+        }
+        startX.value = translateX.value;
+      }
+    };
+
+    const handleDelete = () => {
+      translateX.value = withSpring(-200);
+      setTimeout(() => {
+        onDelete();
+      }, 200);
+    };
+
     return (
-      <View
-        ref={(node) => (setNodeRef as any)(node)}
-        style={[
-          styles.taskCard,
-          { backgroundColor: task.color },
-          { transform: transformStyleArray },
-          isDragging && styles.draggingCard,
-        ]}
-        {...(editingTaskId === task.id ? ({} as any) : (listeners as any))}
-      >
-        {editingTaskId === task.id ? (
-          <View style={styles.editingContainer}>
-            {task.mode === 'list' ? (
-              <View style={styles.listContainer}>
-                {(task.items || []).map((it) => (
-                  <View key={it.id} style={styles.listItemRow}>
-                    <TouchableOpacity
-                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
-                      onPress={() => toggleItemChecked(task.id, it.id)}
-                    >
-                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.listItemInput}
-                      value={it.text}
-                      autoFocus={it.id === lastAddedItemId}
-                      onChangeText={(txt) => {
-                        const next = (task.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
-                        updateTaskItems(task.id, next);
-                      }}
-                    />
-                  </View>
-                ))}
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                  <TouchableOpacity
-                    style={styles.addItemButton}
-                    onPress={() => {
-                      const newId = addTaskItem(task.id);
-                      setLastAddedItemId(newId);
-                    }}
-                  >
-                    <Text style={styles.addItemText}>+ Item</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TextInput
-                style={styles.editingInput}
-                value={editingText}
-                onChangeText={setEditingText}
-                multiline
-                autoFocus
-                onSubmitEditing={saveEditedTask}
-                returnKeyType="done"
-              />
-            )}
-            <View style={styles.editingButtons}>
-              <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
-                <Text style={styles.saveButtonText}>✓</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
-                <Text style={styles.cancelButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.taskViewContainer}>
-            {task.mode === 'list' ? (
-              <View style={{ flex: 1 }}>
-                {(task.items || []).map((it) => (
-                  <View key={it.id} style={styles.listItemRow}>
-                    <TouchableOpacity
-                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
-                      onPress={() => toggleItemChecked(task.id, it.id)}
-                    >
-                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(task)}>
-                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
-                        {it.text}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
-                <Text style={styles.taskText}>{task.text}</Text>
-              </TouchableOpacity>
-            )}
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                style={styles.modeToggleButton}
-                onPress={() => setTaskMode(task.id, task.mode === 'list' ? 'text' : 'list')}
-              >
-                <Text style={styles.modeToggleText}>{task.mode === 'list' ? 'Texto' : 'Lista'}</Text>
-              </TouchableOpacity>
-              {task.mode === 'list' && (
-                <TouchableOpacity
-                  style={styles.addItemButton}
-                  onPress={() => {
-                    const newId = addTaskItem(task.id);
-                    setLastAddedItemId(newId);
-                    startEditingTask(task);
-                  }}
-                >
-                  <Text style={styles.addItemText}>+ Item</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(task.id)}>
-                <Text style={styles.deleteButtonText}>🗑️</Text>
-              </TouchableOpacity>
-              <View style={styles.dragHandle}>
-                <Text style={styles.dragHandleIcon}>≡</Text>
-              </View>
-            </View>
-          </View>
-        )}
+      <View style={{ marginBottom: 15 }}>
+        <View style={styles.deleteButtonContainer}>
+          <Animated.View style={[styles.swipeDelete, deleteButtonStyle]}>
+            <TouchableOpacity style={styles.swipeDeleteInner} onPress={handleDelete}>
+              <Text style={styles.swipeDeleteIcon}>🗑️</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+        <PanGestureHandler
+          enabled={!isActive}
+          activeOffsetX={[-20, 20]}
+          failOffsetY={[-10, 10]}
+          onGestureEvent={onGestureEvent}
+          onHandlerStateChange={onHandlerStateChange}
+        >
+          <Animated.View style={animatedStyle}>
+            {children}
+          </Animated.View>
+        </PanGestureHandler>
       </View>
     );
   };
 
-  const renderDraggableItem = ({ item, drag }: RenderItemParams<Task>) => {
+  
+  
+  
+
+  const MobileReorderableItem = ({ item }: { item: Task }) => {
+    const drag = useReorderableDrag();
     const isEditing = editingTaskId === item.id;
     return (
-      <View style={[styles.taskCard, { backgroundColor: item.color }]}>        
-        {isEditing ? (
-          <View style={styles.editingContainer}>
-            {item.mode === 'list' ? (
-              <View style={styles.listContainer}>
-                {(item.items || []).map((it) => (
-                  <View key={it.id} style={styles.listItemRow}>
+      <SwipeableItem onDelete={() => handleDeleteTask(item.id)}>
+        <View style={[styles.taskCard, { backgroundColor: item.color }]}> 
+          {isEditing ? (
+            <View style={styles.editingContainer}>
+              {item.mode === 'list' ? (
+                <View style={styles.listContainer}>
+                  {(item.items || []).map((it) => (
+                    <View key={it.id} style={styles.listItemRow}>
+                      <TouchableOpacity
+                        style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                        onPress={() => toggleItemChecked(item.id, it.id)}
+                      >
+                        <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.listItemInput}
+                        value={it.text}
+                        autoFocus={it.id === lastAddedItemId}
+                        onChangeText={(txt) => {
+                          const next = (item.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                          updateTaskItems(item.id, next);
+                        }}
+                      />
+                    </View>
+                  ))}
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
                     <TouchableOpacity
-                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
-                      onPress={() => toggleItemChecked(item.id, it.id)}
-                    >
-                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.listItemInput}
-                      value={it.text}
-                      autoFocus={it.id === lastAddedItemId}
-                      onChangeText={(txt) => {
-                        const next = (item.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
-                        updateTaskItems(item.id, next);
+                      style={styles.addItemButton}
+                      onPress={() => {
+                        const newId = addTaskItem(item.id);
+                        setLastAddedItemId(newId);
                       }}
-                    />
+                    >
+                      <Text style={styles.addItemText}>+ Item</Text>
+                    </TouchableOpacity>
                   </View>
-                ))}
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                </View>
+              ) : (
+                <TextInput
+                  style={styles.editingInput}
+                  value={editingText}
+                  onChangeText={setEditingText}
+                  multiline
+                  autoFocus
+                  onSubmitEditing={saveEditedTask}
+                  returnKeyType="done"
+                />
+              )}
+              <View style={styles.editingButtons}>
+                <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
+                  <Text style={styles.saveButtonText}>✓</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
+                  <Text style={styles.cancelButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.taskViewContainer}>
+              {item.mode === 'list' ? (
+                <View style={{ flex: 1 }}>
+                  {(item.items || []).map((it) => (
+                    <View key={it.id} style={styles.listItemRow}>
+                      <TouchableOpacity
+                        style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                        onPress={() => toggleItemChecked(item.id, it.id)}
+                      >
+                        <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(item)}>
+                        <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                          {it.text}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(item)}>
+                  <Text style={styles.taskText}>{item.text}</Text>
+                </TouchableOpacity>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity
+                  style={styles.modeToggleButton}
+                  onPress={() => setTaskMode(item.id, item.mode === 'list' ? 'text' : 'list')}
+                >
+                  <Text style={styles.modeToggleText}>{item.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+                </TouchableOpacity>
+                {item.mode === 'list' && (
                   <TouchableOpacity
                     style={styles.addItemButton}
                     onPress={() => {
                       const newId = addTaskItem(item.id);
                       setLastAddedItemId(newId);
+                      startEditingTask(item);
                     }}
                   >
                     <Text style={styles.addItemText}>+ Item</Text>
                   </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TextInput
-                style={styles.editingInput}
-                value={editingText}
-                onChangeText={setEditingText}
-                multiline
-                autoFocus
-                onSubmitEditing={saveEditedTask}
-                returnKeyType="done"
-              />
-            )}
-            <View style={styles.editingButtons}>
-              <TouchableOpacity 
-                style={styles.saveButton} 
-                onPress={saveEditedTask}
-              >
-                <Text style={styles.saveButtonText}>✓</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.cancelButton} 
-                onPress={cancelEditing}
-              >
-                <Text style={styles.cancelButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.taskViewContainer}>
-            {item.mode === 'list' ? (
-              <View style={{ flex: 1 }}>
-                {(item.items || []).map((it) => (
-                  <View key={it.id} style={styles.listItemRow}>
-                    <TouchableOpacity
-                      style={[styles.checkbox, it.checked && styles.checkboxChecked]}
-                      onPress={() => toggleItemChecked(item.id, it.id)}
-                    >
-                      <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(item)}>
-                      <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
-                        {it.text}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <TouchableOpacity 
-                style={styles.taskTextContainer}
-                onPress={() => startEditingTask(item)}
-              >
-                <Text style={styles.taskText}>{item.text}</Text>
-              </TouchableOpacity>
-            )}
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity 
-                style={styles.modeToggleButton}
-                onPress={() => setTaskMode(item.id, item.mode === 'list' ? 'text' : 'list')}
-              >
-                <Text style={styles.modeToggleText}>{item.mode === 'list' ? 'Texto' : 'Lista'}</Text>
-              </TouchableOpacity>
-              {item.mode === 'list' && (
-                <TouchableOpacity
-                  style={styles.addItemButton}
-                  onPress={() => {
-                    const newId = addTaskItem(item.id);
-                    setLastAddedItemId(newId);
-                    startEditingTask(item);
-                  }}
-                >
-                  <Text style={styles.addItemText}>+ Item</Text>
+                )}
+                <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(item.id)}>
+                  <Text style={styles.deleteButtonText}>🗑️</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={() => handleDeleteTask(item.id)}
-              >
-                <Text style={styles.deleteButtonText}>🗑️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.dragHandle}
-                delayLongPress={150}
-                onLongPress={drag}
-              >
-                <Text style={styles.dragHandleIcon}>≡</Text>
-              </TouchableOpacity>
+                <Pressable style={styles.dragHandle} onLongPress={drag} delayLongPress={150}>
+                  <Text style={styles.dragHandleIcon}>≡</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      </SwipeableItem>
     );
   };
 
+  
+
+  
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
-      
-      {/* Header fixo */}
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>📝 Minhas Tarefas</Text>
-          <View style={styles.headerButtons}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+        
+        {/* Header fixo */}
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.header}
+        >
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>📝 Minhas Tarefas</Text>
+            <View style={styles.headerButtons}>
             <TouchableOpacity 
               style={styles.deletedItemsButton}
               onPress={handleDeletedItems}
@@ -438,17 +372,128 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleWebDragEnd}>
-            <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-              <View style={styles.tasksContainer}>
-                <View style={styles.tasksContent}>
-                  {tasks.map((task) => (
-                    <WebSortableItem key={task.id} task={task} />
-                  ))}
+          <View style={styles.tasksContainer}>
+            <View style={styles.tasksContent}>
+              {tasks.map((task) => (
+                <View
+                  key={task.id}
+                  style={[
+                    styles.taskCard,
+                    { backgroundColor: task.color },
+                  ]}
+                >
+                  {editingTaskId === task.id ? (
+                    <View style={styles.editingContainer}>
+                      {task.mode === 'list' ? (
+                        <View style={styles.listContainer}>
+                          {(task.items || []).map((it) => (
+                            <View key={it.id} style={styles.listItemRow}>
+                              <TouchableOpacity
+                                style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                                onPress={() => toggleItemChecked(task.id, it.id)}
+                              >
+                                <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                              </TouchableOpacity>
+                              <TextInput
+                                style={styles.listItemInput}
+                                value={it.text}
+                                autoFocus={it.id === lastAddedItemId}
+                                onChangeText={(txt) => {
+                                  const next = (task.items || []).map((i) => (i.id === it.id ? { ...i, text: txt } : i));
+                                  updateTaskItems(task.id, next);
+                                }}
+                              />
+                            </View>
+                          ))}
+                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                            <TouchableOpacity
+                              style={styles.addItemButton}
+                              onPress={() => {
+                                const newId = addTaskItem(task.id);
+                                setLastAddedItemId(newId);
+                              }}
+                            >
+                              <Text style={styles.addItemText}>+ Item</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <TextInput
+                          style={styles.editingInput}
+                          value={editingText}
+                          onChangeText={setEditingText}
+                          multiline
+                          autoFocus
+                          onSubmitEditing={saveEditedTask}
+                          returnKeyType="done"
+                        />
+                      )}
+                      <View style={styles.editingButtons}>
+                        <TouchableOpacity style={styles.saveButton} onPress={saveEditedTask}>
+                          <Text style={styles.saveButtonText}>✓</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
+                          <Text style={styles.cancelButtonText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.taskViewContainer}>
+                      {task.mode === 'list' ? (
+                        <View style={{ flex: 1 }}>
+                          {(task.items || []).map((it) => (
+                            <View key={it.id} style={styles.listItemRow}>
+                              <TouchableOpacity
+                                style={[styles.checkbox, it.checked && styles.checkboxChecked]}
+                                onPress={() => toggleItemChecked(task.id, it.id)}
+                              >
+                                <Text style={styles.checkboxText}>{it.checked ? '✓' : ''}</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={{ flex: 1 }} onPress={() => startEditingTask(task)}>
+                                <Text style={[styles.taskText, it.checked && { textDecorationLine: 'line-through', color: '#666' }]}>
+                                  {it.text}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.taskTextContainer} onPress={() => startEditingTask(task)}>
+                          <Text style={styles.taskText}>{task.text}</Text>
+                        </TouchableOpacity>
+                      )}
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={styles.modeToggleButton}
+                          onPress={() => setTaskMode(task.id, task.mode === 'list' ? 'text' : 'list')}
+                        >
+                          <Text style={styles.modeToggleText}>{task.mode === 'list' ? 'Texto' : 'Lista'}</Text>
+                        </TouchableOpacity>
+                        {task.mode === 'list' && (
+                          <TouchableOpacity
+                            style={styles.addItemButton}
+                            onPress={() => {
+                              const newId = addTaskItem(task.id);
+                              setLastAddedItemId(newId);
+                              startEditingTask(task);
+                            }}
+                          >
+                            <Text style={styles.addItemText}>+ Item</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteTask(task.id)}>
+                          <Text style={styles.deleteButtonText}>🗑️</Text>
+                        </TouchableOpacity>
+                        <View style={styles.dragHandle}>
+                          <Text style={styles.dragHandleIcon}>≡</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
                 </View>
-              </View>
-            </SortableContext>
-          </DndContext>
+              ))}
+            </View>
+          </View>
         )
       ) : (
         tasks.length === 0 ? (
@@ -459,14 +504,18 @@ export default function TasksScreen() {
             </Text>
           </View>
         ) : (
-          <DraggableFlatList
+          <ReorderableList
             data={tasks}
-            keyExtractor={(item) => item.id}
-            renderItem={renderDraggableItem}
-            onDragEnd={({ data }) => reorderTasks(data)}
-            style={styles.tasksContainer}
+            keyExtractor={(item: Task) => item.id}
             contentContainerStyle={styles.tasksContent}
-            showsVerticalScrollIndicator
+            onReorder={({ from, to }: { from: number; to: number }) => {
+              const newTasks = arrayMove(tasks, from, to);
+              reorderTasks(newTasks);
+            }}
+            panEnabled
+            panGesture={Gesture.Pan().activeOffsetY([-10, 10]).failOffsetX([-20, 20])}
+            panActivateAfterLongPress={150}
+            renderItem={({ item }: { item: Task }) => <MobileReorderableItem item={item} />}
           />
         )
       )}
@@ -510,6 +559,7 @@ export default function TasksScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -571,6 +621,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  
+
   addTaskContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -645,7 +697,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   taskCard: {
-    width: (width - 60) / 2, // 2 colunas com espaçamento
+    width: CARD_WIDTH, // largura responsiva: 2 colunas no web, 1 coluna no mobile
     minHeight: 120,
     padding: 15,
     borderRadius: 12,
@@ -658,8 +710,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    // Efeito de post-it
-    transform: [{ rotate: `${Math.random() * 4 - 2}deg` }],
   },
   taskTextContainer: {
     flex: 1,
@@ -678,15 +728,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   dragHandle: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    padding: 8,
     marginLeft: 8,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dragHandleIcon: {
-    fontSize: 18,
-    color: '#333',
+    fontSize: 16,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  deleteButtonContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  swipeDelete: {
+    backgroundColor: '#ff4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+    borderRadius: 12,
+  },
+  swipeDeleteInner: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  swipeDeleteIcon: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   modeToggleButton: {
     paddingHorizontal: 8,
@@ -712,6 +787,18 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '600',
   },
+  editButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 8,
+  },
+  editButtonText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
   draggingCard: {
     opacity: 0.95,
     shadowColor: '#000',
@@ -722,9 +809,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   taskText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
-    lineHeight: 20,
+    lineHeight: 22,
     fontWeight: '500',
   },
   listContainer: {
