@@ -12,6 +12,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -19,6 +20,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTaskContext, Task } from '@/contexts/TaskContext';
+import { createNote } from '@/services/noteService';
 
 const { width } = Dimensions.get('window');
 
@@ -47,9 +49,12 @@ export default function TasksScreen() {
   const [editingText, setEditingText] = useState('');
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
 
-  const handleAddTask = () => {
+  const handleAddTask = async() => {
+    const token = await SecureStore.getItemAsync('token');
+    console.log(token)
     if (newTaskText.trim()) {
       addTask({ text: newTaskText.trim(), color: selectedColor });
+      createNote({ title: newTaskText.trim(), content: '', type: 'text' })
       setNewTaskText('');
     }
   };
