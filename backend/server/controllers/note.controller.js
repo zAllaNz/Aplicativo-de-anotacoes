@@ -31,8 +31,8 @@ exports.create = async (req, res) => {
         const userId = decoded.id;
         const { title, content } = req.body;
 
-        if (!title || !content || !userId) {
-            return res.status(400).json({ error: 'Campos "título", "conteúdo" e "userId" são obrigatórios.' });
+        if (!title || !userId) {
+            return res.status(400).json({ error: 'Campos "título" e "userId" são obrigatórios.' });
         }
 
         const newNote = await Note.create({
