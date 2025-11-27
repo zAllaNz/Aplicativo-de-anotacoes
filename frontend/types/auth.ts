@@ -7,7 +7,8 @@ export type LoginResponse = {
   id: string;
   name: string;
   email: string;
-  token: string;
+  accessToken: string;
+  created_at: string;
 };
 
 export type CreateAccountRequest = {
