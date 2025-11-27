@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios'
 import api from './api';
 import { CreateAccountRequest, CreateAccountResponse, LoginRequest, LoginResponse } from '@/types/auth';
 
+// Criação de conta
 export const createAccount = async(data: CreateAccountRequest): Promise<CreateAccountResponse> => {
   try {
     const response = await api.post('/auth/register', {
@@ -19,8 +20,8 @@ export const createAccount = async(data: CreateAccountRequest): Promise<CreateAc
     }
 }
 
+// Login
 export const login = async(data: LoginRequest): Promise<LoginResponse> => {
-  console.log("URL chamada:", api.defaults.baseURL + "/auth/login");
   try {
     const response = await api.post('/auth/login', {
         email: data.email,
