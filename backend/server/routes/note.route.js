@@ -68,7 +68,7 @@ router.post("/", noteController.create);
  *       500:
  *         description: Erro interno do servidor
  */
-router.get("/:userId", noteController.getAll);
+router.get("/", noteController.getAll);
 
 /**
  * @swagger
@@ -141,7 +141,7 @@ router.put("/:id", noteController.update);
  *       500:
  *         description: Erro interno do servidor
  */
-router.put("/delete/:id", noteController.delete);
+router.put("/:id/delete", noteController.delete);
 
 /**
  * @swagger
@@ -171,7 +171,7 @@ router.put("/delete/:id", noteController.delete);
  *       500:
  *         description: Erro interno do servidor
  */
-router.put("/restore/:id", noteController.restore);
+router.put("/:id/restore", noteController.restore);
 
 /**
  * @swagger
@@ -195,7 +195,7 @@ router.put("/restore/:id", noteController.restore);
  *       500:
  *         description: Erro interno do servidor
  */
-router.delete("/delete/:id/permanent", noteController.deletePermanent);
+router.delete("/:id/permanent", noteController.deletePermanent);
 
 /**
  * @swagger
