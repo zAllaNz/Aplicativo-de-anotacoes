@@ -9,8 +9,9 @@ export const createNote = async(data: NoteRequest): Promise<NoteResponse> => {
             title: data.title,
             content: data.content,
             type: data.type,
+            color: data.color
         });
-        return response.data;
+        return response.data?.note;
     } catch (error) {
         if (isAxiosError(error)) {
             throw new Error(error.response?.data.message || 'Erro na requisição de criação de nota');
@@ -21,10 +22,10 @@ export const createNote = async(data: NoteRequest): Promise<NoteResponse> => {
 }
 
 // Obtenção de notas
-export const getNotes = async(user_id: string): Promise<NoteResponse[]> => {
+export const getNotes = async(): Promise<NoteResponse[]> => {
     try {
-        const response = await api.get(`/notes/${user_id}`);
-        return response.data;
+        const response = await api.get(`/notes`);
+        return response.data?.notes;
     } catch (error) {
         if (isAxiosError(error)) {
             throw new Error(error.response?.data.message || 'Erro na requisição de obtenção de notas');
@@ -55,7 +56,7 @@ export const updateNote = async(id: string, data: NoteRequest): Promise<NoteResp
 // Exclusão lógica
 export const deleteNote = async(id: string): Promise<void> => {  
     try {
-        await api.put(`/notes/${id}`);
+        await api.put(`/notes/${id}/delete`);
     } catch (error) {
         if (isAxiosError(error)) {
             throw new Error(error.response?.data.message || 'Erro na requisição de exclusão de nota');
@@ -68,12 +69,24 @@ export const deleteNote = async(id: string): Promise<void> => {
 // Exclusão permanente
 export const deletePermaNote = async(id: string): Promise<void> => {  
     try {
-        await api.delete(`/notes/permanent/${id}`);
+        await api.delete(`/notes/${id}/permanent`);
     } catch (error) {
         if (isAxiosError(error)) {
             throw new Error(error.response?.data.message || 'Erro na requisição de exclusão permanente de nota');
         } else {
             throw new Error('Erro inesperado ao tentar excluir permanentemente nota');
+        }
+    }
+}
+
+export const restoreNote = async(id: string): Promise<void> => {
+    try {
+        await api.put(`/notes/${id}/restore`)
+    } catch (error) {
+        if (isAxiosError(error)) {
+            throw new Error(error.response?.data.message || 'Erro na requisição de restauração de nota');
+        } else {
+            throw new Error('Erro inesperado ao tentar restaurar nota');
         }
     }
 }
