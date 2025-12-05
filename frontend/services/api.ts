@@ -1,4 +1,5 @@
 import axios from "axios";
+import * as SecureStore from 'expo-secure-store';
 
 const api = axios.create({
   baseURL: process.env.EXPO_PUBLIC_API_URL,
@@ -7,7 +8,7 @@ const api = axios.create({
 // Exemplo: adicionar token automaticamente se existir
 api.interceptors.request.use(
   async (config) => {
-    const token = ""; // pode pegar do AsyncStorage, por exemplo
+    const token = await SecureStore.getItemAsync('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
