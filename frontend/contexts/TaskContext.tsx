@@ -11,6 +11,7 @@ export interface Task {
   text: string;
   color: string;
   createdAt: Date;
+  deleted: boolean;
   deletedAt?: Date;
   mode?: 'text' | 'list';
   items?: TaskListItem[];
@@ -19,7 +20,7 @@ export interface Task {
 interface TaskContextType {
   tasks: Task[];
   deletedTasks: Task[];
-  addTask: (task: { text: string; color: string; mode?: 'text' | 'list'; items?: TaskListItem[] }) => void;
+  addTask: (task: { id?: string; text: string; color: string; mode?: 'text' | 'list'; deleted?: boolean; items?: TaskListItem[] }) => void;
   updateTask: (id: string, text: string) => void;
   deleteTask: (id: string) => void;
   restoreTask: (id: string) => void;
@@ -30,6 +31,7 @@ interface TaskContextType {
   updateTaskItems: (id: string, items: TaskListItem[]) => void;
   toggleItemChecked: (taskId: string, itemId: string) => void;
   addTaskItem: (taskId: string, text?: string) => string;
+  resetUserState: () => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -47,50 +49,26 @@ interface TaskProviderProps {
 }
 
 export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
-  const [tasks, setTasks] = useState<Task[]>([
-    // Dados mockados para demonstração
-    {
-      id: '1',
-      text: 'Comprar ingredientes para o jantar',
-      color: '#FFE066',
-      createdAt: new Date(),
-      mode: 'text'
-    },
-    {
-      id: '2', 
-      text: 'Estudar React Native',
-      color: '#99CCFF',
-      createdAt: new Date(),
-      mode: 'text'
-    },
-    {
-      id: '3',
-      text: 'Fazer exercícios físicos',
-      color: '#99FF99',
-      createdAt: new Date(),
-      mode: 'text'
-    },
-    {
-      id: '4',
-      text: 'Ler um livro',
-      color: '#FFCC99',
-      createdAt: new Date(),
-      mode: 'text'
-    }
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
 
-  const addTask = (taskData: { text: string; color: string; mode?: 'text' | 'list'; items?: TaskListItem[] }) => {
+  const addTask = (taskData: { id?: string; text: string; color: string; deleted?: boolean; mode?: 'text' | 'list'; items?: TaskListItem[] }) => {
     const newTask: Task = {
-      id: Date.now().toString(),
+      id: taskData.id ?? Date.now().toString(),
       text: taskData.text,
       color: taskData.color,
+      deleted: taskData.deleted ?? false,
       createdAt: new Date(),
       mode: taskData.mode ?? 'text',
       items: taskData.items ?? []
     };
-    setTasks([newTask, ...tasks]);
+    
+    if (newTask.deleted) {
+      setDeletedTasks([newTask, ...deletedTasks]);
+    } else {
+      setTasks(prev => [newTask, ...prev]);
+    }
   };
 
   const updateTask = (id: string, text: string) => {
@@ -178,6 +156,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     return newId;
   };
 
+  const resetUserState = () => {
+    setTasks([]);
+    setDeletedTasks([]);
+  };
+
+
   const value: TaskContextType = {
     tasks,
     deletedTasks,
@@ -192,6 +176,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     updateTaskItems,
     toggleItemChecked,
     addTaskItem,
+    resetUserState,
   };
 
   return (
