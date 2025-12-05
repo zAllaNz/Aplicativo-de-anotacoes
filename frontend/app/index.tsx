@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { validateEmail } from '../utils/validation';
@@ -45,7 +46,12 @@ export default function LoginScreen() {
     }
 
     login({ email, password })
-    .then(() => {
+    .then(async(response) => {
+      const token = response?.accessToken;
+
+      if (token) {
+        await SecureStore.setItemAsync('token', token);
+      }
       setMessage('Login realizado com sucesso!');
 
       setTimeout(() => {
@@ -58,8 +64,6 @@ export default function LoginScreen() {
     
     // Simulação de login
     // if (email === 'teste@email.com' && password === '123456') {
-      
-
     //   setMessage('Login realizado com sucesso!');
     //   // Redirecionar para a tela de tarefas após 1 segundo
     //   setTimeout(() => {
