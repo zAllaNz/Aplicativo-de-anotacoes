@@ -29,6 +29,7 @@ export const login = async(data: LoginRequest): Promise<LoginResponse> => {
     });
     return response.data;
   } catch (error) {
+    console.log(error)
     if (isAxiosError(error)) {
         throw new Error(error.response?.data.message || 'Erro na requisição de login');
     } else {
