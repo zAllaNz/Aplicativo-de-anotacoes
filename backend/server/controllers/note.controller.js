@@ -29,7 +29,7 @@ exports.create = async (req, res) => {
         }
 
         const userId = decoded.id;
-        const { title, content } = req.body;
+        const { title, content, color } = req.body;
 
         if (!title || !userId) {
             return res.status(400).json({ error: 'Campos "título" e "userId" são obrigatórios.' });
@@ -38,6 +38,7 @@ exports.create = async (req, res) => {
         const newNote = await Note.create({
             title: title,
             content: content,
+            color: color,
             user_id: userId
         });
 
@@ -50,7 +51,24 @@ exports.create = async (req, res) => {
 
 exports.getAll = async (req, res) => {
     try {
-        const { userId } = req.params;
+        let token = req.headers['authorization'];
+        if (!token) {
+            return res.status(401).json({ error: 'Token de autenticação não fornecido.' });
+        }
+
+        token = token.replace('Bearer ', '');
+
+        // Verifica se o token está na blacklist (logout)   
+        const isBlacklisted = await redisClient.get(`bl_${token}`);
+        if (isBlacklisted) {
+            return res.status(401).json({ error: 'Token inválido ou expirado.' });
+        }
+        const decoded = require("jsonwebtoken").verify(token, process.env.JWT_SECURITY_PASS);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Token inválido ou expirado.' });
+        }
+
+        const userId = decoded.id;
         const notes = await Note.findAll({
             where: { user_id: userId },
         });
