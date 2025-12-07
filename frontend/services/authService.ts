@@ -1,0 +1,40 @@
+import { isAxiosError } from 'axios'
+import api from './api';
+import { CreateAccountRequest, CreateAccountResponse, LoginRequest, LoginResponse } from '@/types/auth';
+
+// Criação de conta
+export const createAccount = async(data: CreateAccountRequest): Promise<CreateAccountResponse> => {
+  try {
+    const response = await api.post('/auth/register', {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+    });
+    return response.data;
+    } catch (error) {
+        if (isAxiosError(error)) {
+            throw new Error(error.response?.data.message || 'Erro na requisição de criação de conta');
+        } else {
+            throw new Error('Erro inesperado ao tentar criar conta');
+        }
+    }
+}
+
+// Login
+export const login = async(data: LoginRequest): Promise<LoginResponse> => {
+  try {
+    const response = await api.post('/auth/login', {
+        email: data.email,
+        password: data.password,
+    });
+    return response.data;
+  } catch (error) {
+    console.log(error)
+    if (isAxiosError(error)) {
+        throw new Error(error.response?.data.message || 'Erro na requisição de login');
+    } else {
+        throw new Error('Erro inesperado ao tentar fazer login');
+    }
+    
+  }
+}

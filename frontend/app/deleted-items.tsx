@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useTaskContext } from '@/contexts/TaskContext';
+import { deletePermaNote, restoreNote } from '@/services/noteService';
 
 export default function DeletedItemsScreen() {
   const { deletedTasks, restoreTask, permanentlyDeleteTask, clearAllDeleted } = useTaskContext();
@@ -23,6 +24,7 @@ export default function DeletedItemsScreen() {
           text: 'Restaurar',
           onPress: () => {
             restoreTask(taskId);
+            restoreNote(taskId);
             Alert.alert('Sucesso', 'Tarefa restaurada com sucesso!');
           },
         },
@@ -41,6 +43,7 @@ export default function DeletedItemsScreen() {
           style: 'destructive',
           onPress: () => {
             permanentlyDeleteTask(taskId);
+            deletePermaNote(taskId);
             Alert.alert('Sucesso', 'Tarefa excluída permanentemente!');
           },
         },

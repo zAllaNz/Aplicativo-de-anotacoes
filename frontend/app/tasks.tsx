@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,13 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   GestureHandlerRootView,
   PanGestureHandler,
   State,
+  Gesture
 } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -28,9 +30,10 @@ import Animated, {
 import { arrayMove } from '@dnd-kit/sortable';
 import { LinearGradient } from 'expo-linear-gradient';
 import ReorderableList, { useReorderableDrag, useIsActive } from 'react-native-reorderable-list';
-import { Gesture } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
 import { useTaskContext, Task } from '@/contexts/TaskContext';
+import { createNote, deleteNote, getNotes, updateNote } from '@/services/noteService';
+import { add } from '@dnd-kit/utilities';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Platform.OS === 'web' ? (width - 60) / 2 : width - 40;
@@ -52,7 +55,7 @@ const TASK_COLORS = [
 ];
 
 export default function TasksScreen() {
-  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks, setTaskMode, updateTaskItems, toggleItemChecked, addTaskItem } = useTaskContext();
+  const { tasks, deletedTasks, addTask, updateTask, deleteTask, reorderTasks, setTaskMode, updateTaskItems, toggleItemChecked, addTaskItem, resetUserState } = useTaskContext();
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedColor, setSelectedColor] = useState(TASK_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -62,12 +65,18 @@ export default function TasksScreen() {
 
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
 
-  console.log('TasksScreen - Total de tarefas:', tasks.length);
-  console.log('TasksScreen - Plataforma:', Platform.OS);
+  // console.log('TasksScreen - Total de tarefas:', tasks.length);
+  // console.log('TasksScreen - Plataforma:', Platform.OS);
 
-  const handleAddTask = () => {
+  const handleAddTask = async() => {
     if (newTaskText.trim()) {
-      addTask({ text: newTaskText.trim(), color: selectedColor });
+      createNote({ title: newTaskText.trim(), content: '', type: 'text', color: selectedColor })
+      .then((response) => {
+        addTask({ id: response.id, text: newTaskText.trim(), color: response.color, deleted: response.deleted });
+      })
+      .catch((error) => {
+        console.error('Erro ao criar nota:', error);
+      });
       setNewTaskText('');
     }
   };
@@ -80,6 +89,10 @@ export default function TasksScreen() {
   const saveEditedTask = () => {
     if (editingText.trim() && editingTaskId) {
       updateTask(editingTaskId, editingText.trim());
+      updateNote(editingTaskId, { title: editingText.trim(), content: '', type: 'text', color: selectedColor })
+      .catch((error) => {
+        console.error('Erro ao atualizar nota:', error);
+      });
       setEditingTaskId(null);
       setEditingText('');
     }
@@ -92,6 +105,7 @@ export default function TasksScreen() {
 
   const handleDeleteTask = (taskId: string) => {
     deleteTask(taskId);
+    deleteNote(taskId);
     // Cancela edição se estiver editando esta tarefa
     if (editingTaskId === taskId) {
       cancelEditing();
@@ -102,7 +116,9 @@ export default function TasksScreen() {
     router.push('/deleted-items');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await SecureStore.deleteItemAsync('token');
+    resetUserState();
     router.replace('/');
   };
 
@@ -110,7 +126,24 @@ export default function TasksScreen() {
     router.push('/deleted-items');
   };
 
-  
+  useEffect(() => {
+    getNotes()
+    .then((response) => {
+      response.forEach(note => {
+      const alreadyExists = tasks.some(t => t.id === note.id);
+      if (!alreadyExists) {
+        addTask({
+          id: note.id,
+          text: note.title,
+          color: note.color,
+          deleted: note.deleted,
+        });
+      }
+    });
+    }).catch((error) => {
+      console.error('Erro ao obter notas:', error);
+    });
+  }, []);
 
   // Componente SwipeableItem com react-native-gesture-handler
   const SwipeableItem = ({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) => {
@@ -183,10 +216,6 @@ export default function TasksScreen() {
       </View>
     );
   };
-
-  
-  
-  
 
   const MobileReorderableItem = ({ item }: { item: Task }) => {
     const drag = useReorderableDrag();
@@ -306,10 +335,6 @@ export default function TasksScreen() {
       </SwipeableItem>
     );
   };
-
-  
-
-  
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
